@@ -9,9 +9,10 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.spark_project.jetty.util.ArrayQueue;
-
 import java.util.ArrayList;
 import java.util.List;
+
+
 
 
 public class RankMovies {
@@ -20,11 +21,11 @@ public class RankMovies {
     private SparkSession spark;
 
     public void setConf() {
-        this.conf = new SparkConf().setAppName("Java Spark Rank Movies").setMaster("local[*]");
+        this.conf = new SparkConf().setAppName("Java Spark Rank Movies").setMaster("local[8]");
     }
 
     public void setSpark() {
-        this.spark = SparkSession.builder().config(conf).getOrCreate();
+        this.spark = SparkSession.builder().config(this.conf).getOrCreate();
     }
 
     private String movies_csv_file;
@@ -80,6 +81,7 @@ public class RankMovies {
 
 
     private void get_top_reviewed(){
+        long startTime = System.currentTimeMillis();
         List<Dataset<Row>> datasets = this.apply_Schemas();
         Dataset<Row> movies_ds = datasets.get(0);
         Dataset<Row> review_ds = datasets.get(1);
@@ -89,12 +91,13 @@ public class RankMovies {
         Dataset<Row> review_upd_ds = review_ds.groupBy("movieId").agg(functions.count("rating")).select(functions.col("movieId").alias("movieId"), functions.col("count(rating)").alias("num_ratings")).sort(functions.desc("num_ratings")).limit(10);
 
 
-        Dataset<Row> final_ds =  movies_upd_ds.join(review_upd_ds, movies_upd_ds.col("movieid").equalTo(review_upd_ds.col("movieid")),"inner").select(functions.col("num_ratings"), functions.col("title"));
+        Dataset<Row> final_ds =  review_upd_ds.join(movies_upd_ds, movies_upd_ds.col("movieid").equalTo(review_upd_ds.col("movieid")),"inner").select(functions.col("num_ratings"), functions.col("title"));
 
         //Write the DataSet to a csv file.
         final_ds.coalesce(1).write().mode(SaveMode.Overwrite).csv(this.outpath);
 
-
+        long duration = (System.currentTimeMillis() - startTime)/1000;  //Total execution time in seconds
+        System.out.println(duration+" seconds");
     }
 
     public static void main(String[] args) {
