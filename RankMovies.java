@@ -13,8 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 
-
-
 public class RankMovies {
 
     private SparkConf conf;
@@ -79,7 +77,7 @@ public class RankMovies {
         return schema_list;
     }
 
-
+    //Spark job using Dataset to find the 10 movies with highest number of reviews.
     private void get_top_reviewed(){
         long startTime = System.currentTimeMillis();
         List<Dataset<Row>> datasets = this.apply_Schemas();
@@ -100,15 +98,39 @@ public class RankMovies {
         System.out.println(duration+" seconds");
     }
 
+    //Spark job using Dataset to find average reviews over 4 stars.
+    private void get_avg_rating(){
+        long startTime = System.currentTimeMillis();
+        List<Dataset<Row>> datasets = this.apply_Schemas();
+        Dataset<Row> movies_ds = datasets.get(0);
+        Dataset<Row> review_ds = datasets.get(1);
+
+        //Consider only the top 10 movies with most number of reviews
+        Dataset<Row> movies_upd_ds = movies_ds.select("movieid","title");
+        Dataset<Row> review_ds_ratings = review_ds.groupBy("movieId").agg(functions.count("rating")).select(functions.col("movieId").alias("movie_Id"), functions.col("count(rating)").alias("num_ratings")).filter("num_ratings > 10");
+
+        Dataset<Row> review_ds_avg = review_ds.groupBy("movieId").agg(functions.avg("rating")).select(functions.col("movieId").alias("movieId"), functions.col("avg(rating)").alias("avg_ratings")).filter("avg_ratings > 4");
+
+        Dataset<Row> review_upd_final =review_ds_ratings.join(review_ds_avg, review_ds_ratings.col("movie_Id").equalTo(review_ds_avg.col("movieId")), "inner" ).select( functions.col("movieId"), functions.col("avg_ratings"));
+
+        Dataset<Row> final_ds =  review_upd_final.join(movies_upd_ds, movies_upd_ds.col("movieid").equalTo(review_upd_final.col("movieid")),"inner").select(functions.col("avg_ratings"), functions.col("title"));
+
+        //Write the DataSet to a csv file.
+        final_ds.coalesce(1).write().mode(SaveMode.Overwrite).csv(this.outpath);
+
+        long duration = (System.currentTimeMillis() - startTime)/1000;  //Total execution time in seconds
+        System.out.println(duration+" seconds");
+    }
+
     public static void main(String[] args) {
 
         String moviefile = "/Users/ashu/Documents/SCU/Spring 2020/Big Data/Assignment-3/Assignment3_datasets/DataSet4_large/movies_large.csv";
         String reviewsfile = "/Users/ashu/Documents/SCU/Spring 2020/Big Data/Assignment-3/Assignment3_datasets/DataSet4_large/reviews_large.csv";
-        String outpath = "out";
+        String outpath = "output";
 
         RankMovies rank_movies = new RankMovies(moviefile,reviewsfile,outpath);
-        rank_movies.get_top_reviewed();
-
+        //rank_movies.get_top_reviewed();
+        rank_movies.get_avg_rating();
     }
 
 }
